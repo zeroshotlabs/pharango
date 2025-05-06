@@ -1,287 +1,240 @@
 <?php declare(strict_types=1);
 
-use JsonSerializable as json_serializable;
-use ArrayAccess as array_access;
-
-
-/*
-this should be a document that is associated with a 
-collection
-*/
-
-
-
-class DocumentHandler extends Handler
+class Document implements \ArrayAccess, \JsonSerializable
 {
-    
-    protected string $documentClass = 'Document';
+    protected ?string $_id = null;
+    protected ?string $_key = null;
+    protected ?string $_rev = null;
+    protected bool $_isNew = true;
+    protected array $_values = [];
+    protected ?Collection $_collection = null;
+    protected bool $_isUpdating = false;
 
-    public function __construct($connection)
+    public function __construct(?array $data = null, ?Collection $collection = null)
     {
-        parent::__construct($connection);
-    }
-
-    public function create($collectionName, array $data)
-    {
-        $document = $this->createDocument($data);
-        return $this->save($collectionName, $document);
-    }
-
-    public function getById($collectionName, $id) {
-        // If ID already contains collection name, extract just the key
-        if (strpos($id, '/') !== false) {
-            $parts = explode('/', $id);
-            $id = end($parts);
-        }
-
-        try {
-            $result = $this->make_request('GET', "document/{$collectionName}/{$id}");
-            return $this->createDocument($result);
-        } catch (exception $e) {
-            if ($e->getMessage() === 'document not found') {
-                return null;
+        $this->_collection = $collection;
+        
+        if (is_array($data)) {
+            // Handle system fields first
+            if (isset($data['_id'])) {
+                $this->setId($data['_id']);
+                unset($data['_id']);
             }
-            throw $e;
-        }
-    }
-
-    public function findByExample($collectionName, array $example, array $options = []) {
-        $path = "simple/by-example";
-        $data = [
-            'collection' => $collectionName,
-            'example' => $example
-        ];
-        
-        if (!empty($options)) {
-            $data = array_merge($data, $options);
-        }
-        
-        $result = $this->make_request('PUT', $path, $data);
-        
-        $documents = [];
-        foreach ($result['result'] ?? [] as $doc) {
-            $documents[] = $this->createDocument($doc);
-        }
-        
-        return $documents;
-    }
-
-    public function save($collectionName, $document) {
-        $result = $this->make_request('POST', "document/{$collectionName}", $document->getAll());
-        return $this->createDocument($result);
-    }
-
-    public function update($document, array $data) {
-        foreach ($data as $key => $value) {
-            $document->set($key, $value);
-        }
-        return $this->replace($document);
-    }
-
-    public function replace($document) {
-        $id = $this->getDocumentKey($document);
-        $collectionName = $this->getCollectionName($document);
-        
-        $result = $this->make_request('PUT', "document/{$collectionName}/{$id}", $document->getAll());
-        $document->setRev($result['_rev']);
-        return $document;
-    }
-
-    public function remove($document) {
-        $id = $this->getDocumentKey($document);
-        $collectionName = $this->getCollectionName($document);
-        return $this->make_request('DELETE', "document/{$collectionName}/{$id}");
-    }
-}
-
-
-
-class Document implements json_serializable,array_access
-{
-    protected $_id;
-    protected $_key;
-    protected $_rev;
-    protected $_isNew = true;
-    protected $_values = [];
-
-    public function __construct( ?array $options = null) {
-        if (is_array($options)) {
-            foreach ($options as $key => $value) {
-                $this->set($key, $value);
+            if (isset($data['_key'])) {
+                $this->setKey($data['_key']);
+                unset($data['_key']);
+            }
+            if (isset($data['_rev'])) {
+                $this->setRev($data['_rev']);
+                unset($data['_rev']);
+            }
+            
+            // Set user data
+            foreach ($data as $key => $value) {
+                $this->_values[$key] = $value;
             }
         }
     }
 
-    public function setInternalKey($key) {
-        $this->_key = $key;
-    }
-
-    public function getInternalKey() {
-        return $this->_key;
-    }
-
-    public function getId() {
+    public function getId(): ?string
+    {
         return $this->_id;
     }
 
-    public function setId($id) {
+    public function setId(?string $id): void
+    {
         $this->_id = $id;
-        $parts = explode('/', $id);
-        if (count($parts) > 1) {
-            $this->_key = $parts[1];
+        if ($id) {
+            $parts = explode('/', $id);
+            if (count($parts) > 1) {
+                $this->_key = $parts[1];
+            }
         }
     }
 
-    public function getRev() {
+    public function getKey(): ?string
+    {
+        return $this->_key;
+    }
+
+    public function setKey(?string $key): void
+    {
+        $this->_key = $key;
+    }
+
+    public function getRev(): ?string
+    {
         return $this->_rev;
     }
 
-    public function setRev($rev) {
+    public function setRev(?string $rev): void
+    {
         $this->_rev = $rev;
     }
 
-    public function getIsNew() {
+    public function isNew(): bool
+    {
         return $this->_isNew;
     }
 
-    public function setIsNew($isNew) {
+    public function setIsNew(bool $isNew): void
+    {
         $this->_isNew = $isNew;
     }
 
-    public function offsetExists($key): bool {
-        return isset($this->_values[$key]);
-    }
-
-    public function offsetGet($key): mixed {
-        return $this->get($key);
-    }
-
-    public function offsetSet($key, $value): void {
-        $this->set($key, $value);
-    }
-
-    public function offsetUnset($key): void {
-        unset($this->_values[$key]);
-    }
-
-    public function set($key, $value): void {
+    public function set(string $key, mixed $value): void
+    {
+        // Don't allow setting system fields directly
+        if (in_array($key, ['_id', '_key', '_rev'])) {
+            throw new \RuntimeException("Cannot set system field: {$key}");
+        }
         $this->_values[$key] = $value;
     }
 
-    public function get($key): mixed {
+    public function get(string $key): mixed
+    {
+        // Handle system fields
+        if ($key === '_id') return $this->_id;
+        if ($key === '_key') return $this->_key;
+        if ($key === '_rev') return $this->_rev;
+        
         return $this->_values[$key] ?? null;
     }
 
-    public function getAll(): array {
+    public function getAll(): array
+    {
         $data = $this->_values;
+        // Only include system fields if they exist
         if ($this->_id) $data['_id'] = $this->_id;
         if ($this->_key) $data['_key'] = $this->_key;
         if ($this->_rev) $data['_rev'] = $this->_rev;
         return $data;
     }
 
-    #[\ReturnTypeWillChange]
-    public function jsonSerialize( ?array $options = null): array {
+    public function getData(): array
+    {
+        return $this->_values;
+    }
+
+    public function remove(string $key): void
+    {
+        if (in_array($key, ['_id', '_key', '_rev'])) {
+            throw new \RuntimeException("Cannot remove system field: {$key}");
+        }
+        unset($this->_values[$key]);
+        if (!$this->_isNew) {
+            $this->save();
+        }
+    }
+
+    public function has(string $key): bool
+    {
+        if ($key === '_id') return $this->_id !== null;
+        if ($key === '_key') return $this->_key !== null;
+        if ($key === '_rev') return $this->_rev !== null;
+        
+        return isset($this->_values[$key]);
+    }
+
+    // ArrayAccess implementation
+    public function offsetSet($key, $value): void
+    {
+        if ($key === null) {
+            throw new \RuntimeException('Cannot set value without a key');
+        }
+        $this->set($key, $value);
+        if (!$this->_isNew) {
+            $this->save();
+        }
+    }
+
+    public function offsetGet($key): mixed
+    {
+        return $this->get($key);
+    }
+
+    public function offsetExists($key): bool
+    {
+        return $this->has($key);
+    }
+
+    public function offsetUnset($key): void
+    {
+        $this->remove($key);
+    }
+
+    // JsonSerializable implementation
+    public function jsonSerialize(): array
+    {
         return $this->getAll();
     }
-}
 
-
-
-class ddocument implements \ArrayAccess
-{
-    use ArangoRealtimePersistenceTrait;
-
-    protected array $fields = [];
-    protected $collectionName;
-    protected $dbHandler; // Should be an instance of your DocumentHandler or similar
-    protected $key; // _key
-
-    public function __construct($collectionName, $dbHandler, array $data = [], bool $realtime = true)
+    public function setCollection(?Collection $collection): void
     {
-        $this->collectionName = $collectionName;
-        $this->dbHandler = $dbHandler;
-        $this->fields = $data;
-        $this->realtimePersistence = $realtime;
-        $this->key = $data['_key'] ?? null;
-
-        // Set up the callback for persistence
-        $this->setPersistCallback(function($field, $value, $allFields) {
-            if ($this->key) {
-                // Update only the changed field in the DB
-                $this->update($this->collectionName, $this->key, [$field => $value]);
-            } else {
-                // Insert new document
-                $result = $this->insert($this->collectionName, $allFields);
-                $this->key = is_object($result) ? $result->_key : ($result['_key'] ?? null);
-            }
-        });
+        $this->_collection = $collection;
     }
 
-    // ArrayAccess methods
-    public function offsetExists($offset): bool
+    public function getCollection(): ?Collection
     {
-        return isset($this->fields[$offset]);
+        return $this->_collection;
     }
 
-    public function offsetGet($offset): mixed
+    // Manual save functionality (for batch operations)
+    public function save(): void
     {
-        return $this->fields[$offset] ?? null;
-    }
+        if (!$this->_collection) {
+            throw new \RuntimeException('No collection set for document');
+        }
 
-    public function offsetSet($offset, $value): void
-    {
-        $this->fields[$offset] = $value;
-        $this->onFieldChange($offset, $value);
-    }
-
-    public function offsetUnset($offset): void
-    {
-        unset($this->fields[$offset]);
-        $this->onFieldChange($offset, null);
-    }
-
-    // Manual save (for batch mode)
-    public function save()
-    {
-        if ($this->key) {
-            $this->update($this->collectionName, $this->key, $this->fields);
+        if ($this->_isNew) {
+            // Create new document
+            $result = $this->_collection->getConnection()->make_request(
+                'POST',
+                "document/{$this->_collection->getCollectionName()}",
+                $this->getData()
+            );
+            $this->setId($result['_id']);
+            $this->setKey($result['_key']);
+            $this->setRev($result['_rev']);
+            $this->setIsNew(false);
         } else {
-            $result = $this->insert($this->collectionName, $this->fields);
-            $this->key = is_object($result) ? $result->_key : ($result['_key'] ?? null);
+            // Update existing document with PATCH
+            $result = $this->_collection->getConnection()->make_request(
+                'PATCH',
+                "document/{$this->_collection->getCollectionName()}/{$this->_key}",
+                ['document' => $this->getData()]
+            );
+            $this->setRev($result['_rev']);
         }
     }
 
-    // Insert a new document
-    public function insert($collectionName, $data)
+    // Batch update multiple fields at once
+    public function update(array $data): void
     {
-        $result = $this->dbHandler->create($collectionName, $data);
-        if (isset($result->_key)) {
-            $this->key = $result->_key;
-        } elseif (is_array($result) && isset($result['_key'])) {
-            $this->key = $result['_key'];
+        foreach ($data as $key => $value) {
+            $this->set($key, $value);
         }
-        return $result;
+        if (!$this->_isNew) {
+            $this->save();
+        }
     }
 
-    // Update an existing document
-    public function update($collectionName, $key, $data)
-    {
-        $doc = array_merge($this->fields, ['_key' => $key], $data);
-        $result = $this->dbHandler->replace((object)$doc);
-        if (is_object($result) && isset($result->_rev)) {
-            $this->fields['_rev'] = $result->_rev;
-        } elseif (is_array($result) && isset($result['_rev'])) {
-            $this->fields['_rev'] = $result['_rev'];
-        }
-        return $result;
-    }
-
-    // Get all fields
+    // Get document as array (alias for getAll)
     public function toArray(): array
     {
-        return $this->fields;
+        return $this->getAll();
+    }
+
+    protected function persistField(string $key, mixed $value): void
+    {
+        if ($this->_collection && $this->_key && !$this->_isNew) {
+            $this->_isUpdating = true;
+            try {
+                $this->_collection->update($this, [$key => $value]);
+            } finally {
+                $this->_isUpdating = false;
+            }
+        }
     }
 }
-
 

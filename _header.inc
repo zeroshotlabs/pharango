@@ -1,126 +1,7 @@
 <?php declare(strict_types=1);
 
 
-
-trait ArangoRealtimePersistenceTrait
-{
-    public bool $realtimePersistence = true;
-    public ?\Closure $persistCallback = null; // function($field, $value, $allFields)
-
-
-    // Called when a field is changed
-    protected function onFieldChange($field, $value)
-    {
-        if ($this->realtimePersistence && $this->persistCallback) {
-            // Persist only the changed field (or all fields, as needed)
-            call_user_func($this->persistCallback, $field, $value, $this->_values);
-        }
-    }
-}
-
-trait db_data_common
-{
-    protected function make_request(string $method, string $path, ?array $data = null, ?string $db = null): array
-    {
-        $db = $db ?? $this->connection->database or throw new exception('Database not set');
-        $url = "http://{$this->connection->host}:{$this->connection->port}/_db/{$db}/_api/{$path}";
-
-        $headers = [
-            "Authorization: Basic " . base64_encode("{$this->connection->username}:{$this->connection->password}")
-        ];
-        
-        if ($data !== null)
-            $headers[] = "Content-Type: application/json";
-        
-        $options = [
-            "http" => [
-                "method" => $method,
-                "header" => implode("\r\n", $headers),
-                "ignore_errors" => true
-            ]
-        ];
-        
-        if ($data !== null) {
-            $options["http"]["content"] = json_encode($data);
-        }
-        
-        $context = stream_context_create($options);
-        $response = file_get_contents($url, false, $context);
-        $result = json_decode($response, true);
-        
-        if (!empty($result['error']))
-            throw new exception($result['errorMessage'], $result['code']);
-        
-        return $result;
-    }
-}
-
-abstract class Handler
-{
-    use db_data_common;
-
-    protected $connection;
-    protected string $documentClass;
-
-    public function __construct($connection)
-    {
-        if( empty($this->documentClass))
-            throw new exception('Document class not set');
-
-        $this->connection = $connection;
-    }
-
-    // public function setDocumentClass($documentClass)
-    // {
-    //     $this->documentClass = $documentClass;
-    // }
-
-    protected function init_document($data) {
-        $class = $this->documentClass;
-        $document = new $class($data);
-        if (isset($data['_id']))
-            $document->setId($data['_id']);
-
-        if (isset($data['_rev']))
-            $document->setRev($data['_rev']);
-
-        $document->setIsNew(false);
-        return $document;
-    }
-
-    protected function getCollectionName($document) {
-        return explode('/', $document->getId())[0];
-    }
-
-    protected function getDocumentKey($document) {
-        return $document->getInternalKey();
-    }
-}
-
-
-
-
-class ServerException extends \Exception {
-    private $serverMessage;
-    
-    public function __construct($message, $code = 0, ?\Throwable $previous = null) {
-        parent::__construct($message, $code, $previous);
-        $this->serverMessage = $message;
-    }
-    
-    public function getServerMessage() {
-        return $this->serverMessage;
-    }
-}
-
-class ClientException extends exception {}
-
-class ConnectException extends exception {}
-
-
-require('libarangodb.php');
-
-
+// namespace arangodb;
 
 // $connectionOptions = [
 //     "host" => "localhost",
@@ -144,6 +25,215 @@ require('libarangodb.php');
 //     'host' => 'localhost',
 //     'port' => 8529,
 //     'username' => 'root',
-//     'password' => '',
+//     'password' => 'zaun3r3',
 //     'database' => 'hoppr'
 // ]);
+
+
+// Exception class for server errors
+class ServerException extends \Exception {
+    protected int $httpCode;
+    
+    public function __construct(string $message, int $httpCode = 500) {
+        parent::__construct($message);
+        $this->httpCode = $httpCode;
+    }
+    
+    public function getHttpCode(): int {
+        return $this->httpCode;
+    }
+}
+
+class ClientException extends exception {}
+
+class ConnectException extends exception {}
+
+// Include required files
+require_once __DIR__ . '/connection.php';
+require_once __DIR__ . '/document.php';
+require_once __DIR__ . '/collection.php';
+require_once __DIR__ . '/cursor.php';
+
+// Simple test if this file is run directly
+if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'])) {
+    try {
+        // Create connection
+        $connection = new Connection([
+            'host' => 'localhost',
+            'port' => 8529,
+            'username' => 'root',
+            'password' => 'zaun3r3',
+            'database' => '_system'  // Start with _system database
+        ]);
+
+        // Ensure test database exists
+        $testDb = 'test';
+        echo "Ensuring database '{$testDb}' exists...\n";
+        $connection->ensureDatabase($testDb);
+        echo "Database '{$testDb}' is ready.\n";
+
+        // Switch to test database
+        $connection->useDatabase($testDb);
+
+        // Create collection
+        $collection = new Collection('users', $connection);
+        echo "Ensuring collection 'users' exists...\n";
+        $collection->ensureCollection();
+        echo "Collection 'users' is ready.\n";
+
+        // Create a new document
+        $user = $collection->create([
+            'name' => 'John Doe',
+            'email' => 'john@example.com'
+        ]);
+        echo "Created user with key: " . $user->getKey() . "\n";
+
+        // Update a field
+        $user['age'] = 30;
+        echo "Updated age to: " . $user['age'] . "\n";
+
+        // Find specific user
+        $john = $collection->readOneByExample(['name' => 'John Doe']);
+        if ($john) {
+            echo "Found John: " . $john['email'] . "\n";
+        }
+
+        // Delete user
+        $collection->delete($user->getKey());
+        echo "Deleted user\n";
+
+    } catch (ServerException $e) {
+        echo "Error: " . $e->getMessage() . "\n";
+    }
+}
+
+// Test the new Document functionality
+if (isset($_GET['test']) && $_GET['test'] === 'document') {
+    try {
+        // Create a connection with default settings
+        $connection = new Connection([
+            'host' => 'localhost',
+            'port' => 8529,
+            'username' => 'root',
+            'password' => 'zaun3r3',
+            'database' => '_system'  // Start with _system database
+        ]);
+        
+        // Ensure test database exists
+        $testDb = 'test';
+        echo "Ensuring database '{$testDb}' exists...<br>";
+        $connection->ensureDatabase($testDb);
+        echo "Database '{$testDb}' is ready.<br><br>";
+        
+        // Switch to test database
+        $connection->useDatabase($testDb);
+        
+        // Create a test collection
+        $collection = new Collection('test_collection', $connection);
+        echo "Ensuring collection 'test_collection' exists...<br>";
+        $collection->ensureCollection();
+        echo "Collection 'test_collection' is ready.<br><br>";
+        
+        echo "<h2>Testing Document Operations</h2>";
+        
+        // Test 1: Create a new document
+        echo "<h3>Test 1: Create Document</h3>";
+        $doc = new Document([
+            'name' => 'John Doe',
+            'age' => 30,
+            'email' => 'john@example.com'
+        ], $collection);
+        $doc->save();
+        $docKey = $doc->getKey();
+        echo "Created document with key: " . $docKey . "<br>";
+        echo "Document data: " . json_encode($doc->getAll()) . "<br><br>";
+        
+        // Test 2: Read document
+        echo "<h3>Test 2: Read Document</h3>";
+        $readDoc = $collection->get($docKey);
+        echo "Read document: " . json_encode($readDoc->getAll()) . "<br><br>";
+        
+        // Test 3: Update document using array access
+        echo "<h3>Test 3: Update Document (Array Access)</h3>";
+        $doc['age'] = 31;
+        $doc['city'] = 'New York';
+        echo "Updated document: " . json_encode($doc->getAll()) . "<br><br>";
+        
+        // Test 4: Update document using set()
+        echo "<h3>Test 4: Update Document (set method)</h3>";
+        $doc->set('email', 'john.doe@example.com');
+        $doc->set('phone', '123-456-7890');
+        echo "Updated document: " . json_encode($doc->getAll()) . "<br><br>";
+        
+        // Test 5: Remove fields
+        echo "<h3>Test 5: Remove Fields</h3>";
+        unset($doc['phone']);
+        $doc->remove('city');
+        echo "Document after removals: " . json_encode($doc->getAll()) . "<br><br>";
+        
+        // Test 6: Batch update
+        echo "<h3>Test 6: Batch Update</h3>";
+        $doc->update([
+            'name' => 'John A. Doe',
+            'age' => 32,
+            'title' => 'Developer'
+        ]);
+        echo "Document after batch update: " . json_encode($doc->getAll()) . "<br><br>";
+        
+        // Test 7: Field existence checks
+        echo "<h3>Test 7: Field Existence Checks</h3>";
+        echo "Has 'name': " . ($doc->has('name') ? 'Yes' : 'No') . "<br>";
+        echo "Has 'phone': " . ($doc->has('phone') ? 'Yes' : 'No') . "<br>";
+        echo "Has 'title': " . ($doc->has('title') ? 'Yes' : 'No') . "<br><br>";
+        
+        // Test 8: Get specific fields
+        echo "<h3>Test 8: Get Specific Fields</h3>";
+        echo "Name: " . $doc->get('name') . "<br>";
+        echo "Age: " . $doc->get('age') . "<br>";
+        echo "Non-existent field: " . ($doc->get('nonexistent') ?? 'null') . "<br><br>";
+        
+        // Test 9: Document metadata
+        echo "<h3>Test 9: Document Metadata</h3>";
+        echo "ID: " . $doc->getId() . "<br>";
+        echo "Key: " . $doc->getKey() . "<br>";
+        echo "Revision: " . $doc->getRev() . "<br>";
+        echo "Is New: " . ($doc->isNew() ? 'Yes' : 'No') . "<br><br>";
+        
+        // Test 10: Create another document and test collection operations
+        echo "<h3>Test 10: Multiple Documents</h3>";
+        $doc2 = new Document([
+            'name' => 'Jane Smith',
+            'age' => 28,
+            'email' => 'jane@example.com'
+        ], $collection);
+        $doc2->save();
+        
+        // Get all documents
+        $allDocs = $collection->all();
+        echo "All documents in collection:<br>";
+        foreach ($allDocs as $d) {
+            echo json_encode($d->getAll()) . "<br>";
+        }
+        echo "<br>";
+        
+        // Test 11: Delete document
+        echo "<h3>Test 11: Delete Document</h3>";
+        $collection->delete($docKey);
+        echo "Deleted document with key: " . $docKey . "<br>";
+        
+        // Verify deletion
+        try {
+            $collection->get($docKey);
+            echo "Error: Document still exists!<br>";
+        } catch (\RuntimeException $e) {
+            echo "Success: Document was deleted<br>";
+        }
+        
+        echo "<br>All tests completed successfully!";
+        
+    } catch (\Exception $e) {
+        echo "Error: " . $e->getMessage() . "<br>";
+        echo "Stack trace: <pre>" . $e->getTraceAsString() . "</pre>";
+    }
+    exit;
+}
