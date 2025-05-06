@@ -86,7 +86,7 @@ if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'])) {
             'name' => 'John Doe',
             'email' => 'john@example.com'
         ]);
-        echo "Created user with key: " . $user->getKey() . "\n";
+        echo "Created user with key: " . $user['_key'] . "\n";
 
         // Update a field
         $user['age'] = 30;
@@ -95,11 +95,11 @@ if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'])) {
         // Find specific user
         $john = $collection->readOneByExample(['name' => 'John Doe']);
         if ($john) {
-            echo "Found John: " . $john['email'] . "\n";
+            echo "Found John: " . $john['email'] . " age: " . $john['age'] . "\n";
         }
 
         // Delete user
-        $collection->delete($user->getKey());
+        $collection->delete($user['_key']);
         echo "Deleted user\n";
 
     } catch (ServerException $e) {
@@ -144,7 +144,7 @@ if (isset($_GET['test']) && $_GET['test'] === 'document') {
             'email' => 'john@example.com'
         ], $collection);
         $doc->save();
-        $docKey = $doc->getKey();
+        $docKey = $doc['_key'];
         echo "Created document with key: " . $docKey . "<br>";
         echo "Document data: " . json_encode($doc->getAll()) . "<br><br>";
         
@@ -194,10 +194,9 @@ if (isset($_GET['test']) && $_GET['test'] === 'document') {
         
         // Test 9: Document metadata
         echo "<h3>Test 9: Document Metadata</h3>";
-        echo "ID: " . $doc->getId() . "<br>";
-        echo "Key: " . $doc->getKey() . "<br>";
-        echo "Revision: " . $doc->getRev() . "<br>";
-        echo "Is New: " . ($doc->isNew() ? 'Yes' : 'No') . "<br><br>";
+        echo "ID: " . $doc['_id'] . "<br>";
+        echo "Key: " . $doc['_key'] . "<br>";
+        echo "Revision: " . $doc['_rev'] . "<br><br>";
         
         // Test 10: Create another document and test collection operations
         echo "<h3>Test 10: Multiple Documents</h3>";

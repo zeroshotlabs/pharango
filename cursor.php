@@ -6,11 +6,13 @@ class Cursor implements \Iterator, \Countable
     private array $result;
     private ?array $documents = null;
     private int $position = 0;
+    private ?Collection $collection = null;
     
-    public function __construct(Connection $connection, array $result)
+    public function __construct(Connection $connection, array $result, ?Collection $collection = null)
     {
         $this->connection = $connection;
         $this->result = $result;
+        $this->collection = $collection;
     }
     
     public function count(): int
@@ -24,15 +26,7 @@ class Cursor implements \Iterator, \Countable
             $this->documents = [];
             if (isset($this->result['result'])) {
                 foreach ($this->result['result'] as $doc) {
-                    $document = new Document($doc);
-                    if (isset($doc['_id'])) {
-                        $document->setId($doc['_id']);
-                    }
-                    if (isset($doc['_rev'])) {
-                        $document->setRev($doc['_rev']);
-                    }
-                    $document->setIsNew(false);
-                    $this->documents[] = $document;
+                    $this->documents[] = new Document($doc, $this->collection);
                 }
             }
         }

@@ -138,10 +138,19 @@ class Connection
             throw new ServerException('Authentication failed. Please check your username and password.', 401);
         }
         
+        if ($httpCode === 404) {
+            throw new ServerException('Resource not found: ' . $url, 404);
+        }
+        
+        if ($httpCode === 409) {
+            throw new ServerException('Conflict: The operation conflicts with the current state of the resource.', 409);
+        }
+        
         if ($httpCode >= 400) {
             $error = json_decode($response, true);
             $errorMessage = $error['errorMessage'] ?? "HTTP Error: $httpCode";
-            throw new ServerException($errorMessage, $httpCode);
+            $errorNum = $error['errorNum'] ?? 0;
+            throw new ServerException("$errorMessage (Error code: $errorNum)", $httpCode);
         }
         
         $result = json_decode($response, true);
