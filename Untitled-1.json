@@ -1,0 +1,12 @@
+{
+  "_key": "48796",
+  "_id": "users/48796",
+  "_rev": "_jnbP1gG---",
+  "cpu_id": "BFEBFBFF000A0652",
+  "created": 1746295446560,
+  "email": "emmanuel.botros@zsl.ai",
+  "mac_address": "60:18:95:75:77:BC",
+  "network_info": "Wi-Fi:192.168.1.13:255.255.255.0;gw:192.168.1.1;vEthernet (WSL (Hyper-V firewall)):172.18.32.1:255.255.240.0;gw:192.168.1.1;",
+  "type": "user",
+  "uid": "10525c26-9e75-4909-b312-6e1334315b37"
+}
