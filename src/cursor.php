@@ -1,5 +1,8 @@
 <?php declare(strict_types=1);
 
+namespace pharango;
+
+
 class Cursor implements \Iterator, \Countable
 {
     private Connection $connection;

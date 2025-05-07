@@ -1,4 +1,5 @@
 <?php declare(strict_types=1);
+namespace pharango;
 
 /* still with the age bug
 Ensuring database 'test' exists...
@@ -39,10 +40,25 @@ Deleted user
 //     'database' => 'hoppr'
 // ]);
 
+trait base_trait
+{
+    // public function aql(string $query): array
+    // {
+    //     return $this->make_request('POST', 'cursor', [
+    //         'query' => $query
+    //     ]);
+    // }
+    public function aql(string $query): array
+    {
+        if( !empty($this->connection) )
+            return $this->connection->aql($query);
 
+        throw new \Exception('No connection found for aql query: '.$query);
+    }
+}
 
 // Exception class for server errors
-class pharango_exception extends exception {
+class pharango_exception extends \Exception {
     protected int $httpCode;
     
     public function __construct(string $message, int $httpCode = 500) {
@@ -61,10 +77,11 @@ class ClientException extends pharango_exception {}
 
 class ConnectException extends pharango_exception {}
 
+
 // Include required files
-require_once __DIR__ . '/connection.php';
-require_once __DIR__ . '/document.php';
-require_once __DIR__ . '/collection.php';
-require_once __DIR__ . '/cursor.php';
+require __DIR__ . '/src/connection.php';
+require __DIR__ . '/src/document.php';
+require __DIR__ . '/src/collection.php';
+require __DIR__ . '/src/cursor.php';
 
 

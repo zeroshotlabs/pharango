@@ -51,7 +51,7 @@ try {
 } catch (ServerException $e) {
     echo "Error: " . $e->getMessage() . "\n";
 }
-}
+
 
 // if (isset($_GET['test']) && $_GET['test'] === 'document') {
 
