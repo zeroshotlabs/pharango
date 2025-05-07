@@ -34,7 +34,10 @@ class Document implements \ArrayAccess, \JsonSerializable
                     ['document' => $this->_values]
                 );
                 $this->_values = $result;
-            } else {
+            }
+            else
+            {
+                throw new Exception('DOCUMENT KEY NOT SET for "$key" => "$value"');
                 // Create new document
                 $result = $this->_collection->getConnection()->make_request(
                     'POST',
