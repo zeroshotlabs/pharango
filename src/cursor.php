@@ -12,7 +12,8 @@ class Cursor implements \Iterator, \Countable
     private ?Collection $collection = null;
     private ?string $id = null;
     private bool $hasMore = false;
-    
+
+
     public function __construct(Connection $connection, array $result, ?Collection $collection = null)
     {
         $this->connection = $connection;
@@ -67,29 +68,36 @@ class Cursor implements \Iterator, \Countable
         if (!$this->hasMore || $this->id === null) {
             return false;
         }
+
+        $result = $this->connection->aql("FETCH CURSOR {$this->id}");
+        $this->result = $result;
+        $this->hasMore = $result['hasMore'] ?? false;
+        $this->documents = null;
+        return true;
+
         
-        try {
-            $result = $this->connection->make_request('PUT', "cursor/{$this->id}");
+        // try {
+        //     $result = $this->connection->make_request('PUT', "cursor/{$this->id}");
             
-            // Append new results to existing ones
-            if (isset($result['result']) && is_array($result['result'])) {
-                if (isset($this->result['result']) && is_array($this->result['result'])) {
-                    $this->result['result'] = array_merge($this->result['result'], $result['result']);
-                } else {
-                    $this->result['result'] = $result['result'];
-                }
-            }
+        //     // Append new results to existing ones
+        //     if (isset($result['result']) && is_array($result['result'])) {
+        //         if (isset($this->result['result']) && is_array($this->result['result'])) {
+        //             $this->result['result'] = array_merge($this->result['result'], $result['result']);
+        //         } else {
+        //             $this->result['result'] = $result['result'];
+        //         }
+        //     }
             
-            // Update cursor state
-            $this->hasMore = $result['hasMore'] ?? false;
+        //     // Update cursor state
+        //     $this->hasMore = $result['hasMore'] ?? false;
             
-            // Force reloading documents
-            $this->documents = null;
+        //     // Force reloading documents
+        //     $this->documents = null;
             
-            return true;
-        } catch (\Exception $e) {
-            return false;
-        }
+        //     return true;
+        // } catch (\Exception $e) {
+        //     return false;
+        // }
     }
 
     // Delete cursor on server
@@ -98,15 +106,20 @@ class Cursor implements \Iterator, \Countable
         if ($this->id === null) {
             return true;
         }
+
+        $result = $this->connection->aql("DELETE CURSOR {$this->id}");
+        $this->id = null;
+        $this->hasMore = false;
+        return true;
         
-        try {
-            $this->connection->make_request('DELETE', "cursor/{$this->id}");
-            $this->id = null;
-            $this->hasMore = false;
-            return true;
-        } catch (\Exception $e) {
-            return false;
-        }
+        // try {
+        //     $this->connection->make_request('DELETE', "cursor/{$this->id}");
+        //     $this->id = null;
+        //     $this->hasMore = false;
+        //     return true;
+        // } catch (\Exception $e) {
+        //     return false;
+        // }
     }
 
     // Fetch all remaining batches

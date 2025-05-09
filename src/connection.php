@@ -150,10 +150,10 @@ class Connection
         // Prepare the request data
         $data = json_encode([
             'query' => $aql,
-            'bindVars' => $bindVars,
+            'bindVars' => (object) $bindVars,
             'batchSize' => 1000
         ]);
-        var_dump($data);
+//        var_dump($data);
         // Initialize cURL
         $ch = curl_init();
         
@@ -174,27 +174,26 @@ class Connection
 
         // Handle errors
         if (curl_errno($ch)) {
-            error_log('ArangoDB query error: ' . curl_error($ch));
+            $error = 'ArangoDB query error: ' . curl_error($ch);
             curl_close($ch);
-            return null;
+            error_log($error);
+            throw new ServerException($error, 500);
         }
-        
-        curl_close($ch);
         
         // Parse response
         $result = json_decode($response, true);
-        
         // Check for errors in the response
-        if ($httpCode >= 400 || !isset($result['result']))
+        if ( $result['error'] || !isset($result['result']))
         {
             $errorMessage = $result['errorMessage'] ?? 'Unknown error';
             $errorCode = $result['errorNum'] ?? $httpCode;
-            error_log("ArangoDB error {$errorCode}: {$errorMessage}");
-            return null;
+            error_log("ArangoDB error {$errorCode}: {$aql} | {$errorMessage}");
+            throw new ServerException($aql.' | '.$errorMessage, $errorCode);
         }
         
         return $result['result'];
     }
+}
 
     // public function make_request(string $method, string $url, array $data = []): array
     // {
@@ -250,4 +249,3 @@ class Connection
         
     //     return $result ?? [];
     // }
-}
