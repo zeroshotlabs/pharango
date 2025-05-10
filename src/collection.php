@@ -6,11 +6,13 @@ use pharango\ClientException as client_exception;
 
 class Collection implements \ArrayAccess, \Countable
 {
-    use base_trait;
+    use _pharango;
     public bool $_auto_ddl;
     public string $_name;
     public string $_doc_name;
     public Connection $_connection;
+    protected array $_edgeDefinitions = [];
+    protected string $_graphName = 'hop_graph';
 
     // doc_name is the singular name of the collection by default
     public function __construct(Connection $connection, string $name = '',string $doc_name = '', bool $auto_ddl = true)
@@ -21,7 +23,10 @@ class Collection implements \ArrayAccess, \Countable
         $this->_auto_ddl = $auto_ddl;
 
         if( $this->_auto_ddl )
+        {
             $this->ensure_exists();
+            $this->ensure_edge_collections();
+        }
     }
 
     public function __toString(): string
@@ -45,6 +50,22 @@ class Collection implements \ArrayAccess, \Countable
 
         // If the collection was not created, throw an exception
         throw new client_exception("Failed to create collection: " . $result['error']);
+    }
+
+    /**
+     * Ensure edge collections exist
+     */
+    protected function ensure_edge_collections(): void
+    {
+        foreach ($this->_edgeDefinitions as $definition) {
+            $edgeCollection = new Collection(
+                $this->_connection,
+                $definition['collection'],
+                '',
+                $this->_auto_ddl
+            );
+            $edgeCollection->ensure_exists();
+        }
     }
 
     // ArrayAccess implementation - this is an insert()
@@ -314,6 +335,27 @@ class Collection implements \ArrayAccess, \Countable
         {
             throw new client_exception("Failed to create collection: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Create a new document with validation
+     */
+    public function createDocument(array $data): Document
+    {
+        $doc = new ($this->_doc_name)($this, $data);
+        $doc->validate();
+        return $this->insert($doc->toArray());
+    }
+
+    /**
+     * Update a document with validation
+     */
+    public function updateDocument(string $key, array $data): Document
+    {
+        $doc = new ($this->_doc_name)($this, $data);
+        $doc->validate();
+        $doc->_values['_key'] = $key;
+        return $this->insert($doc->toArray());
     }
 
 }

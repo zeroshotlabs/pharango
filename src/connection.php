@@ -6,7 +6,7 @@ namespace pharango;
 
 class Connection
 {
-    use base_trait;
+    use _pharango;
     
     protected string $host;
     protected int $port;

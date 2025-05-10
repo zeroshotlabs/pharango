@@ -40,22 +40,6 @@ Deleted user
 //     'database' => 'hoppr'
 // ]);
 
-trait base_trait
-{
-    // public function aql(string $query): array
-    // {
-    //     return $this->make_request('POST', 'cursor', [
-    //         'query' => $query
-    //     ]);
-    // }
-    public function aql(string $query): array
-    {
-        if( !empty($this->connection) )
-            return $this->connection->aql($query);
-
-        throw new \Exception('No connection found for aql query: '.$query);
-    }
-}
 
 // Exception class for server errors
 class pharango_exception extends \Exception {
@@ -79,9 +63,35 @@ class ConnectException extends pharango_exception {}
 
 
 // Include required files
+require __DIR__ . '/src/traits.php';
 require __DIR__ . '/src/connection.php';
 require __DIR__ . '/src/document.php';
 require __DIR__ . '/src/collection.php';
 require __DIR__ . '/src/cursor.php';
+require __DIR__ . '/src/graph.php';
+require __DIR__ . '/src/graph_document.php';
+require __DIR__ . '/src/graph_collection.php';
 
+
+// // Test edge cases
+// try {
+//     $collection->findByMessageId('');  // Should throw InvalidArgumentException
+// } catch (\InvalidArgumentException $e) {
+//     // Expected
+// }
+
+// // Test invalid edge definitions
+// try {
+//     $collection->_edgeDefinitions = [];  // Should throw RuntimeException
+//     $collection->getRelationships('key', 'type');
+// } catch (\RuntimeException $e) {
+//     // Expected
+// }
+
+// // Test AQL error handling
+// try {
+//     $collection->getRelationships('invalid_key', 'type');
+// } catch (\RuntimeException $e) {
+//     // Should contain AQL error message
+// }
 
