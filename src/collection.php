@@ -47,29 +47,22 @@ class Collection implements \ArrayAccess, \Countable
         throw new client_exception("Failed to create collection: " . $result['error']);
     }
 
-    // ArrayAccess implementation
+    // ArrayAccess implementation - this is an insert()
     public function offsetSet($key, $value): void
     {
-        // return new document objects - will still need to save() them
-        // if ($key === null)
-        // {
-        //     return new ($this->_doc_name)($value, $this);
-
-        // } else
-        // {
-            error_log("offsetSet: ".$key." specific key update/etc not implemented for collections");
-//        }
+        if ($key === null)
+        {
+            $this->insert($value);
+        } else
+        {
+            throw new client_exception("offsetSet: ".$key." specific key update/etc not implemented for collections");
+        }
     }
 
     // $result = $this->_connection->make_request('POST', "document/{$this->_name}", $value);
     // $result = $this->_connection->make_request('PUT', "document/{$this->_name}/{$key}", $value);
 
-    // FOR u IN users
-    // FILTER u.active == true AND u.gender == "f"
-    // SORT u.age ASC
-    // LIMIT 5
-    // RETURN u
-
+    // supports array of constraints for find()
     public function offsetGet($key): Document|null
     {
         if (is_array($key))
@@ -87,48 +80,15 @@ class Collection implements \ArrayAccess, \Countable
 
     public function offsetExists($key): bool
     {
-        throw new client_exception("Not offsetExists implemented: ".$key);
-
-        // if (is_array($key)) {
-        //     // Example query: isset($collection['name' => 'John'])
-        //     $example = $key;
-        //     $result = $this->make_request('PUT', 'simple/query-by-example', [
-        //         'collection' => $this->_name,
-        //         'example' => $example,
-        //         'limit' => 1
-        //     ]);
-        //     return !empty($result['result']);
-        // }
-        
-        // // Check by key
-        // try {
-        //     $this->make_request('GET', "document/{$this->_name}/{$key}");
-        //     return true;
-        // } catch (\Exception $e) {
-        //     return false;
-        // }
+        if( $this->offsetGet($key) )
+            return true;
+        else
+            return false;
     }
 
     public function offsetUnset($key): void
     {
-        throw new client_exception("Not unset implemented: ".$key);
-        // if (is_array($key)) {
-        //     // Example query: unset($collection['name' => 'John'])
-        //     $example = $key;
-        //     $result = $this->make_request('PUT', 'simple/query-by-example', [
-        //         'collection' => $this->_name,
-        //         'example' => $example,
-        //         'limit' => 1
-        //     ]);
-            
-        //     if (!empty($result['result'])) {
-        //         $key = $result['result'][0]['_key'];
-        //         $this->make_request('DELETE', "document/{$this->_name}/{$key}");
-        //     }
-        // } else {
-        //     // Delete by key
-        //     $this->make_request('DELETE', "document/{$this->_name}/{$key}");
-        // }
+        throw new client_exception("Unset not implemented - use delete() instead: ".$key);
     }
 
     /*
@@ -150,21 +110,19 @@ class Collection implements \ArrayAccess, \Countable
     {
         $queryData = $this->_connection->buildAqlQuery('insert', $data);
         
-        if (defined('_DEBUG'))
-        {
-            echo "\n\nQUERY: ".$queryData['query'];  
-            echo "\n\nBIND VARS: ".json_encode($queryData['bindVars']);
-        }
-
         $result = $this->_connection->aql($queryData['query'], $queryData['bindVars']);
         
         if (defined('_DEBUG'))
-            echo "\n\nRESULT: ".json_encode($result,JSON_PRETTY_PRINT);
+        {
+            echo "\n\nINSERT QUERY: ".$queryData['query'];  
+            echo "\n\nINSERT BIND VARS: ".json_encode($queryData['bindVars'],JSON_PRETTY_PRINT);
+            echo "\n\nINSERT RESULT: ".json_encode($result,JSON_PRETTY_PRINT);
+        }
 
-        if (!isset($result['result'][0]))
-            throw new client_exception("Failed to insert document: " . json_encode($result));
+        // if (!isset($result['result'][0]))
+        //     throw new client_exception("Failed to insert document: " . json_encode($result));
 
-        return new ($this->_doc_name)($this,$result['result'][0]);
+        return new ($this->_doc_name)($this,$result);
     }
 
     public function find(array $example = [], int $limit = 0, int $skip = 0): Document|array|null
@@ -242,7 +200,7 @@ class Collection implements \ArrayAccess, \Countable
 
         $result = $this->_connection->aql($query, $filter['bindVars']);
 
-        return count($result['result'] ?? []);
+        return count($result ?? []);
     }
 
     // Countable implementation
@@ -272,18 +230,16 @@ class Collection implements \ArrayAccess, \Countable
             }
             
             $query .= " COLLECT WITH COUNT INTO length RETURN length";
-            
+
+            $result = $this->_connection->aql($query, $bindVars);
+
             if (defined('_DEBUG'))
             {
                 error_log("COUNT QUERY: ".$query);
                 error_log("COUNT BIND VARS: ".json_encode($bindVars));
-            }
-            
-            $result = $this->_connection->aql($query, $bindVars);
-            
-            if (defined('_DEBUG'))
                 error_log("COUNT RESULT: ".json_encode($result,JSON_PRETTY_PRINT));
-            
+            }
+
             return $result['result'][0] ?? 0;
         }
         
@@ -311,7 +267,8 @@ class Collection implements \ArrayAccess, \Countable
      */
     public function buildFilterFromConstraint(array|null $constraint): array
     {
-        if (empty($constraint)) {
+        if (empty($constraint))
+        {
             return [
                 'filterClause' => '',
                 'bindVars' => []
@@ -321,12 +278,16 @@ class Collection implements \ArrayAccess, \Countable
         $bindVars = [];
         $conditions = [];
 
-        foreach ($constraint as $field => $value) {
+        foreach ($constraint as $field => $value)
+        {
             $paramName = str_replace('.', '_', $field);
             
-            if ($value === null) {
+            if ($value === null)
+            {
                 $conditions[] = "doc.{$field} == null";
-            } else {
+            }
+            else
+            {
                 $conditions[] = "doc.{$field} == @{$paramName}";
                 $bindVars[$paramName] = $value;
             }
@@ -340,7 +301,19 @@ class Collection implements \ArrayAccess, \Countable
 
     public function create(): array
     {
-        return $this->_connection->aql("CREATE COLLECTION {$this->_name}");
+        try
+        {
+            $result = $this->_connection->make_request('POST', 'collection', ['name' => $this->_name]);
+
+            if (isset($result['error']) && $result['error'])
+                throw new client_exception("Failed to create collection: " . $result['errorMessage']);
+
+            return $result;
+        }
+        catch (\Exception $e)
+        {
+            throw new client_exception("Failed to create collection: " . $e->getMessage());
+        }
     }
 
 }

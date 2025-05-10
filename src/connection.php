@@ -193,59 +193,61 @@ class Connection
         
         return $result['result'];
     }
+
+    public function make_request(string $method, string $url, array $data = []): array
+    {
+        $ch = curl_init();
+        $fullUrl = $this->build_url($url);
+        curl_setopt($ch, CURLOPT_URL, $fullUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        
+        $headers = [
+            'Content-Type: application/json',
+            'Accept: application/json'
+        ];
+        
+        // Always include Authorization header
+        $auth = base64_encode($this->username . ':' . $this->password);
+        $headers[] = "Authorization: Basic {$auth}";
+        
+        if (!empty($data))
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        if (curl_errno($ch))
+            throw new ServerException('Connection error: ' . curl_error($ch), 0);
+        
+        curl_close($ch);
+        
+        if ($httpCode === 401)
+            throw new ServerException('Authentication failed. Please check your username and password.', 401);
+        
+        if ($httpCode === 404)
+            throw new ServerException('Resource not found: ' . $url, 404);
+        
+        if ($httpCode === 409)
+            throw new ServerException('Conflict: The operation conflicts with the current state of the resource.', 409);
+        
+        if ($httpCode >= 400)
+        {
+            $error = json_decode($response, true);
+            $errorMessage = $error['errorMessage'] ?? "HTTP Error: $httpCode";
+            $errorNum = $error['errorNum'] ?? 0;
+            throw new ServerException("$errorMessage (Error code: $errorNum)", $httpCode);
+        }
+        
+        $result = json_decode($response, true);
+        if (json_last_error() !== JSON_ERROR_NONE)
+            throw new ServerException('Invalid JSON response: ' . json_last_error_msg(), 500);
+        
+        return $result ?? [];
+    }
 }
 
-    // public function make_request(string $method, string $url, array $data = []): array
-    // {
-    //     $ch = curl_init();
-    //     $fullUrl = "http://{$this->host}:{$this->port}/_db/{$this->database}/_api/{$url}";
-    //     curl_setopt($ch, CURLOPT_URL, $fullUrl);
-    //     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    //     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-    //     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        
-    //     $headers = [
-    //         'Content-Type: application/json',
-    //         'Accept: application/json'
-    //     ];
-        
-    //     // Always include Authorization header
-    //     $auth = base64_encode($this->username . ':' . $this->password);
-    //     $headers[] = "Authorization: Basic {$auth}";
-        
-    //     if (!empty($data))
-    //         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
 
-    //     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        
-    //     $response = curl_exec($ch);
-    //     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
-    //     if (curl_errno($ch))
-    //         throw new ServerException('Connection error: ' . curl_error($ch), 0);
-        
-    //     curl_close($ch);
-        
-    //     if ($httpCode === 401)
-    //         throw new ServerException('Authentication failed. Please check your username and password.', 401);
-        
-    //     if ($httpCode === 404)
-    //         throw new ServerException('Resource not found: ' . $url, 404);
-        
-    //     if ($httpCode === 409)
-    //         throw new ServerException('Conflict: The operation conflicts with the current state of the resource.', 409);
-        
-    //     if ($httpCode >= 400)
-    //     {
-    //         $error = json_decode($response, true);
-    //         $errorMessage = $error['errorMessage'] ?? "HTTP Error: $httpCode";
-    //         $errorNum = $error['errorNum'] ?? 0;
-    //         throw new ServerException("$errorMessage (Error code: $errorNum)", $httpCode);
-    //     }
-        
-    //     $result = json_decode($response, true);
-    //     if (json_last_error() !== JSON_ERROR_NONE)
-    //         throw new ServerException('Invalid JSON response: ' . json_last_error_msg(), 500);
-        
-    //     return $result ?? [];
-    // }
