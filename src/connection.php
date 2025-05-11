@@ -77,7 +77,7 @@ class Connection
     /**
      * Build an AQL query with proper parameter binding
      */
-    public function buildAqlQuery(string $operation, array $data = [], array $options = [], string $collection_name = ''): array
+    public function buildAqlQuery(string $operation, array $data = [], array $options = [], string $collection_name = '',$upsert_key = null): array
     {
         $query = '';
         $bindVars = [];
@@ -109,7 +109,8 @@ class Connection
             case 'insert':
                 $fields = [];
                 foreach ($data as $key => $value) {
-                    $fields[] = "{$key}: @{$key}";
+                    $key = str_replace('-','_',$key);
+                    $fields[] = "`{$key}`: @{$key}";
                     $bindVars[$key] = $value;
                 }
                 
@@ -125,6 +126,18 @@ class Connection
 
                 $query = "UPDATE {_key: '{$data['_key']}'} WITH { " . implode(", ", $fields) . " } INTO @@collection RETURN NEW";
                 break;
+
+            // case 'upsert':
+            //     $fields = [];
+            //     $upsert = [];
+            //     foreach ($data as $key => $value)
+            //     {
+            //         $fields[] = "{$key}: @{$key}";
+            //         $bindVars[$key] = $value;
+            //     }
+
+            //     $query = "UPSERT {{$upsert_key}: '{$upsert_key}'} INSERT { " . implode(", ", $fields) . " } UPDATE { " . implode(", ", $fields) . " } INTO @@collection RETURN NEW";
+            //     break;
         }
 
         $bindVars['@collection'] = $data['_collection']??$collection_name;

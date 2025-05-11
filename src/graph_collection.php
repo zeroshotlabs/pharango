@@ -44,6 +44,7 @@ abstract class GraphCollection extends Collection
     {
         $doc = new ($this->_doc_name)($this, $data);
         $doc->validate();
+        $doc['_key'] = $doc['_key']??$doc['message-id'];
         return $this->insert($doc->toArray());
     }
     

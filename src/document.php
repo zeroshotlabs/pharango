@@ -13,7 +13,8 @@ class Document extends \ArrayObject implements \JsonSerializable
 
     public array $_struct = [];
     public array $_values = [];
-    protected string $_graphName = 'hop_graph';
+    public array $values = [];
+    protected string $_graphName = '';
     protected array $_edgeDefinitions = [];
 
     public function __construct( ?Collection $collection = null,array|Traversable|null $data = null )
@@ -110,10 +111,11 @@ class Document extends \ArrayObject implements \JsonSerializable
     {
         if ($key === null)
             throw new \RuntimeException('Cannot set value without a key');
-        
+
+
         // ArangoDB has reserved system fields that should not be modified directly
         if (in_array($key, ['_id', '_key', '_rev', '_from', '_to']) || !isset($this->_struct[$key]) )
-            throw new \RuntimeException("Cannot set system field or undefined field: {$key}");
+            throw new \RuntimeException("Cannot set system field or undefined field: {$key} in ".(string) $this->_collection);
         
         $this->_values[$key] = $value;
         
