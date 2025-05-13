@@ -76,6 +76,8 @@ class Connection
 
     /**
      * Build an AQL query with proper parameter binding
+     * 
+     * @todo using hyphens in field names was a poor choice
      */
     public function buildAqlQuery(string $operation, array $data = [], array $options = [], string $collection_name = '',$upsert_key = null): array
     {
@@ -127,17 +129,33 @@ class Connection
                 $query = "UPDATE {_key: '{$data['_key']}'} WITH { " . implode(", ", $fields) . " } INTO @@collection RETURN NEW";
                 break;
 
-            // case 'upsert':
-            //     $fields = [];
-            //     $upsert = [];
-            //     foreach ($data as $key => $value)
-            //     {
-            //         $fields[] = "{$key}: @{$key}";
-            //         $bindVars[$key] = $value;
-            //     }
+            case 'upsert':
+                $fields = [];
+                foreach ($data as $key => $value) {
+                    // Create a safe bind parameter name by replacing hyphens with underscores
+                    $bind_key = str_replace('-', '_', $key);
+                    $fields[] = "`{$key}`: @{$bind_key}";
+                    $bindVars[$bind_key] = $value;
+                }
 
-            //     $query = "UPSERT {{$upsert_key}: '{$upsert_key}'} INSERT { " . implode(", ", $fields) . " } UPDATE { " . implode(", ", $fields) . " } INTO @@collection RETURN NEW";
-            //     break;
+                // Use provided upsert_key or default to _key
+                $match_key = $upsert_key ?? '_key';
+                $match_value = $data[$match_key] ?? null;
+                
+                if (!$match_value) {
+                    throw new \RuntimeException("Cannot perform upsert without a value for match key: {$match_key}");
+                }
+
+                // Create safe bind parameter name for match key
+                $bind_match_key = str_replace('-', '_', $match_key);
+                $bindVars[$bind_match_key] = $match_value;
+
+                $query = "UPSERT { `{$match_key}`: @{$bind_match_key} } 
+                         INSERT { " . implode(", ", $fields) . " } 
+                         UPDATE { " . implode(", ", $fields) . " } 
+                         INTO @@collection 
+                         RETURN NEW";
+                break;
         }
 
         $bindVars['@collection'] = $data['_collection']??$collection_name;
@@ -159,7 +177,7 @@ class Connection
     {        
         // Build the API endpoint URL
         $url = $this->build_url('cursor');
-        
+
         // Prepare the request data
         $data = json_encode([
             'query' => $aql,
@@ -186,7 +204,8 @@ class Connection
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
         // Handle errors
-        if (curl_errno($ch)) {
+        if (curl_errno($ch))
+        {
             $error = 'ArangoDB query error: ' . curl_error($ch);
             curl_close($ch);
             error_log($error);
@@ -195,6 +214,7 @@ class Connection
         
         // Parse response
         $result = json_decode($response, true);
+
         // Check for errors in the response
         if ( $result['error'] || !isset($result['result']))
         {

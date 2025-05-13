@@ -168,30 +168,15 @@ class Document extends \ArrayObject implements \JsonSerializable
     {
         if (!$this->_collection)
             throw new \RuntimeException('Cannot sync document without a collection');
-        
-        
-        if (!isset($this->_values['_key']) && $this->_collection->_auto_ddl )
-            $verb = 'insert';
-        else if( isset($this->_values['_key']) && $this->_collection->_auto_ddl )
-            $verb = 'update';
-        else
-            throw new \RuntimeException('Cannot sync document without a key and no auto_ddl (CREATE). Use save() for new documents.');
 
-        $queryData = $this->_connection->buildAqlQuery($verb, $this->_values, [], (string) $this->_collection);
+        $queryData = $this->_connection->buildAqlQuery('upsert', $this->_values, [],
+                                                       (string) $this->_collection,
+                                                       upsert_key: 'message-id');
 
         if( defined('_DEBUG') )
             error_log('SYNC: '.print_r($queryData,true));
 
         $result = $this->_connection->aql($queryData['query'],$queryData['bindVars']);
-
-
-            // // Update existing document
-            // // make update to the document using AQL query
-            // $query = "UPDATE {$this->_collection}
-            //             WITH {_key: '{$this->_values['_key']}'}
-            //              SET @values";
-            // // perform the AQL query same as the find() function
-            // $result = $this->_connection->aql($query,['@values' =>['cpu_id'=>'fdsfsa']]);
 
         // Update revision
         if (isset($result['_rev']))
