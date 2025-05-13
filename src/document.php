@@ -171,7 +171,7 @@ class Document extends \ArrayObject implements \JsonSerializable
 
         $queryData = $this->_connection->buildAqlQuery('upsert', $this->_values, [],
                                                        (string) $this->_collection,
-                                                       upsert_key: 'message-id');
+                                                       upsert_key: 'message_id');
 
         if( defined('_DEBUG') )
             error_log('SYNC: '.print_r($queryData,true));

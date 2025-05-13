@@ -93,7 +93,7 @@ class Connection
                     $conditions = [];
                     
                     foreach ($data as $key => $value) {
-                        $conditions[] = "doc.{$key} == @{$key}";
+                        $conditions[] = "doc.`{$key}` == @{$key}";
                         $bindVars[$key] = $value;
                     }
                     
@@ -122,7 +122,7 @@ class Connection
             case 'update':
                 $fields = [];
                 foreach ($data as $key => $value) {
-                    $fields[] = "{$key}: @{$key}";
+                    $fields[] = "`{$key}`: @{$key}";
                     $bindVars[$key] = $value;
                 }
 
