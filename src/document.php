@@ -4,6 +4,7 @@ namespace pharango;
 
 use RuntimeException;
 use Traversable;
+
 // should be an ArrayObject and be mostly used as an object (collections are array)
 class Document extends \ArrayObject implements \JsonSerializable
 {
@@ -17,6 +18,7 @@ class Document extends \ArrayObject implements \JsonSerializable
     protected string $_graphName = '';
     protected array $_edgeDefinitions = [];
 
+
     public function __construct( ?Collection $collection = null,array|Traversable|null $data = null )
     {
         if($collection)
@@ -29,9 +31,11 @@ class Document extends \ArrayObject implements \JsonSerializable
         // array_walk data elements into the struct
         // only use collection->struct keys to walk the data
         if (is_array($data) || $data instanceof \Traversable)
+        {
             // only use collection->struct keys to walk the data    
             foreach($this->_struct as $key => $value)
                 $this->_values[$key] = $data[$key]??$value;
+        }
         else if( !empty($data) )
             throw new RuntimeException('Cannot walk data without an array or Traversable: hh'.print_r($data,true));
 
@@ -109,24 +113,26 @@ class Document extends \ArrayObject implements \JsonSerializable
     // ArrayAccess implementation
     public function offsetSet($key, $value): void
     {
-        if ($key === null)
-            throw new \RuntimeException('Cannot set value without a key');
-
+        // if ($key === null)
+        //     throw new \RuntimeException('Cannot set value without a key');
 
         // ArangoDB has reserved system fields that should not be modified directly
-        if (in_array($key, ['_id', '_key', '_rev', '_from', '_to']) || !isset($this->_struct[$key]) )
-            throw new \RuntimeException("Cannot set system field or undefined field: {$key} in ".(string) $this->_collection);
+        // if (in_array($key, ['_id', '_key', '_rev', '_from', '_to']) || !isset($this->_struct[$key]) )
+        //     throw new \RuntimeException("Cannot set system field or undefined field: {$key} in ".(string) $this->_collection);
         
-        $this->_values[$key] = $value;
+        if( $key === null )
+            $this->_values[] = $value;
+        else
+            $this->_values[$key] = $value;
         
         // Save changes if we're in connected mode - use AQL query
         if ($this->_connected && $this->_collection && isset($this->_values['_key']))
-            $this->sync();
+            $this->sync('_key');
     }
 
     public function offsetGet($key): mixed
     {
-        return $this->_values[$key] ?? $this->_struct[$key] ?? null;
+        return $this->_values[$key] ?? ($this->_struct[$key] ?? null);
     }
 
     public function offsetExists($key): bool
@@ -143,7 +149,7 @@ class Document extends \ArrayObject implements \JsonSerializable
         
         // Save changes if we're in connected mode
         if ($this->_connected && $this->_collection && isset($this->_values['_key']))
-            $this->sync();
+            $this->sync('_key');
     }
 
     // JsonSerializable implementation
@@ -164,14 +170,14 @@ class Document extends \ArrayObject implements \JsonSerializable
      * Sync document changes with the database
      * Used internally for connected mode
      */
-    public function sync(): void
+    public function sync( string $upsert_key_name ): void
     {
         if (!$this->_collection)
             throw new \RuntimeException('Cannot sync document without a collection');
 
         $queryData = $this->_connection->buildAqlQuery('upsert', $this->_values, [],
                                                        (string) $this->_collection,
-                                                       upsert_key: 'message_id');
+                                                       upsert_key: $upsert_key_name);
 
         if( defined('_DEBUG') )
             error_log('SYNC: '.print_r($queryData,true));
